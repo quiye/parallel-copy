@@ -21,11 +21,8 @@ class stopWatch {
   }
 };
 
-using some_map_type = std::unordered_map<std::string, std::map<std::string, std::vector<uint64_t>>>;
-using some_vec_type = std::vector<std::map<std::string, std::vector<uint64_t>>>;
-
 auto setupMap(uint64_t s) {
-  some_map_type ret;
+  std::unordered_map<std::string, std::map<std::string, std::vector<uint64_t>>> ret;
   for (size_t i = 0; i < s; i++) {
     decltype(ret.begin()->second) m;
     for (size_t j = 0; j < s; j++) {
@@ -36,7 +33,7 @@ auto setupMap(uint64_t s) {
   return ret;
 }
 auto setupVec(uint64_t s) {
-  some_vec_type ret;
+  std::vector<std::map<std::string, std::vector<uint64_t>>> ret;
   for (size_t i = 0; i < s; i++) {
     std::map<std::string, std::vector<uint64_t>> m;
     for (size_t j = 0; j < s; j++) {
@@ -47,48 +44,48 @@ auto setupVec(uint64_t s) {
   return ret;
 }
 
-some_map_type parCopyMap(const some_map_type& src, std::size_t parNum = 4) {
+template <typename II, typename val_type>
+auto parCopyVec(II begin, II end, std::size_t parNum = 4) {
   std::vector<std::future<void>> futures;
   futures.reserve(parNum);
-  const auto t = src.size();
-  some_map_type ret;
-  ret.reserve(t);
+  const auto t = std::distance(begin, end);
+  std::vector<val_type> ret(t);
 
   for (size_t i = 0; i < parNum; i++) {
-    futures.push_back(std::async(std::launch::async, [&ret, &src, i, t, parNum]() {
-      ret.insert(std::next(src.cbegin(), (i * t) / parNum), std::next(src.cbegin(), ((i + 1) * t) / parNum));
+    futures.push_back(std::async(std::launch::async, [&ret, &begin, i, t, parNum]() {
+      std::copy(std::next(begin, (i * t) / parNum), std::next(begin, ((i + 1) * t) / parNum), std::next(ret.begin(), (i * t) / parNum));
     }));
   }
 
   return ret;
 }
 
-auto parCopyVec(const some_vec_type& src, std::size_t parNum = 4) {
-  std::vector<std::future<void>> futures;
-  futures.reserve(parNum);
+template <typename val_type>
+auto parCopyMap(const val_type& src, std::size_t parNum = 4) {
+  auto v = parCopyVec<decltype(src.begin()), std::pair<std::string, std::map<std::string, std::vector<uint64_t>>>>(src.begin(), src.end(), parNum);
   const auto t = src.size();
-  some_vec_type ret(t);
-
-  for (size_t i = 0; i < parNum; i++) {
-    futures.push_back(std::async(std::launch::async, [&ret, &src, i, t, parNum]() {
-      std::copy(std::next(src.cbegin(), (i * t) / parNum), std::next(src.cbegin(), ((i + 1) * t) / parNum), std::next(ret.begin(), (i * t) / parNum));
-    }));
+  val_type ret;
+  ret.reserve(t);
+  for (auto&& it : v) {
+    ret.insert(std::move(it));
   }
 
   return ret;
 }
 
 int main() {
-  const auto orig = setupMap(658);
-  for (size_t i = 0; i < 10; i++) {
+  const int iter_num = 3;
+  const int orig_size = 599;
+  const auto orig = setupMap(orig_size);
+  for (size_t i = 0; i < iter_num; i++) {
     decltype(setupMap(358)) dest;
     {
       stopWatch t("copy");
-      dest = some_map_type(orig.begin(), orig.end());
+      dest = orig;
     }
     dest.clear();
   }
-  for (size_t i = 0; i < 10; i++) {
+  for (size_t i = 0; i < iter_num; i++) {
     decltype(setupMap(358)) dest;
     {
       stopWatch t("par 2 ");
@@ -97,7 +94,7 @@ int main() {
     dest.clear();
   }
 
-  for (size_t i = 0; i < 10; i++) {
+  for (size_t i = 0; i < iter_num; i++) {
     decltype(setupMap(358)) dest;
     {
       stopWatch t("par 4 ");
@@ -105,7 +102,7 @@ int main() {
     }
     dest.clear();
   }
-  for (size_t i = 0; i < 10; i++) {
+  for (size_t i = 0; i < iter_num; i++) {
     decltype(setupMap(358)) dest;
     {
       stopWatch t("par 6 ");
@@ -122,42 +119,42 @@ int main() {
     }
   }
 
-  const auto origV = setupVec(658);
-  for (size_t i = 0; i < 10; i++) {
+  const auto origV = setupVec(orig_size);
+  for (size_t i = 0; i < iter_num; i++) {
     decltype(setupVec(358)) dest;
     {
       stopWatch t("copy");
-      dest = some_vec_type(origV.begin(), origV.end());
+      dest = origV;
     }
     dest.clear();
   }
-  for (size_t i = 0; i < 10; i++) {
+  for (size_t i = 0; i < iter_num; i++) {
     decltype(setupVec(358)) dest;
     {
       stopWatch t("par 2 ");
-      dest = parCopyVec(origV, 2);
+      dest = parCopyVec<decltype(origV.begin()), std::map<std::string, std::vector<uint64_t>>>(origV.begin(), origV.end(), 2);
     }
     dest.clear();
   }
-  for (size_t i = 0; i < 10; i++) {
+  for (size_t i = 0; i < iter_num; i++) {
     decltype(setupVec(358)) dest;
     {
       stopWatch t("par 4 ");
-      dest = parCopyVec(origV, 4);
+      dest = parCopyVec<decltype(origV.begin()), std::map<std::string, std::vector<uint64_t>>>(origV.begin(), origV.end(), 4);
     }
     dest.clear();
   }
-  for (size_t i = 0; i < 10; i++) {
+  for (size_t i = 0; i < iter_num; i++) {
     decltype(setupVec(358)) dest;
     {
       stopWatch t("par 6 ");
-      dest = parCopyVec(origV, 6);
+      dest = parCopyVec<decltype(origV.begin()), std::map<std::string, std::vector<uint64_t>>>(origV.begin(), origV.end(), 6);
     }
     dest.clear();
   }
   {
     std::vector a(origV.begin(), origV.end());
-    auto p = parCopyVec(origV, 6);
+    auto p = parCopyVec<decltype(origV.begin()), std::map<std::string, std::vector<uint64_t>>>(origV.begin(), origV.end(), 6);
     std::vector b(p.begin(), p.end());
     if (a != b) {
       std::cout << "failed" << std::endl;
